@@ -1,0 +1,452 @@
+<!doctype html>
+<html>
+<head>
+<title>Gallery Test</title>
+
+<meta name="viewport" content="width=device-width, user-scalable=no">
+
+<script src="jquery.js"></script>
+<script src="velocity.js"></script>
+<script src="mithril.js"></script>
+<script src="scream.js"></script>
+<script src="brim.js"></script>
+
+<style type="text/css">
+
+body {
+    margin: 0px;
+    padding: 0px;
+}
+
+#brim-mask {
+    pointer-events: none;
+}
+
+.gallery-container {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    -ms-touch-action: none;
+}
+
+.gallery-slider {
+    float: left;
+    height: 100%;
+    position: relative;
+    z-index: 0;
+}
+
+.gallery-item {
+    width: 100vw;
+    height: 100%;
+    position: absolute;
+    top: 0px;
+}
+
+.gallery-left-button {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    z-index: 1;
+}
+
+.gallery-right-button {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+}
+
+</style>
+
+
+
+<script>
+
+// performance.now polyfill from: https://gist.github.com/paulirish/5438650
+//
+// @license http://opensource.org/licenses/MIT
+// copyright Paul Irish 2015
+//
+// Date.now() is supported everywhere except IE8. For IE8 we use the Date.now polyfill
+//   github.com/Financial-Times/polyfill-service/blob/master/polyfills/Date.now/polyfill.js
+// as Safari 6 doesn't have support for NavigationTiming, we use a Date.now() timestamp for relative values
+//
+// if you want values similar to what you'd get with real perf.now, place this towards the head of the page
+// but in reality, you're just getting the delta between now() calls, so it's not terribly important where it's placed
+(function() {
+    if ("performance" in window == false) {
+        window.performance = {};
+    }
+
+    Date.now = (Date.now || function () {  // thanks IE8
+        return new Date().getTime();
+    });
+
+    if ("now" in window.performance == false) {
+        var nowOffset = Date.now();
+
+        if (performance.timing && performance.timing.navigationStart) {
+            nowOffset = performance.timing.navigationStart
+        }
+
+        window.performance.now = function now() {
+            return Date.now() - nowOffset;
+        }
+    }
+})();
+
+
+function clamp(num, min, max) {
+    if (num < min) {
+        num = min;
+    } else if (num > max) {
+        num = max;
+    }
+    return num;
+}
+
+
+$(window).resize(function() {
+    m.redraw();
+});
+
+
+var GalleryViewModel = function() {
+    var vm = this;
+
+    var images = [
+        "https://upload.wikimedia.org/wikipedia/commons/3/36/Hopetoun_falls.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/1/1a/Bachalpseeflowers.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/3Falls_Niagara.jpg/1280px-3Falls_Niagara.jpg",
+        "https://upload.wikimedia.org/wikipedia/commons/a/af/Grand_Canyon_view_from_Pima_Point_2010.jpg"
+    ];
+
+    var currentPos = 0;
+    var targetPos = 0;
+
+    var animOrigin = 0;
+    var animTarget = 0;
+    var animDiff = 0;
+
+    var swipeDiff = 0;
+
+    vm.startAnim = function() {
+        animOrigin = vm.getPosition();
+        animTarget = targetPos;
+        animDiff = 0;
+    };
+
+    vm.stopAnim = function() {
+        currentPos += animDiff;
+
+        animOrigin = 0;
+        animTarget = 0;
+        animDiff = 0;
+
+        if (vm.isAtTarget()) {
+            currentPos = Math.round(vm.getPosition());
+            targetPos = currentPos;
+            swipeDiff = 0;
+        }
+    };
+
+    vm.animProgress = function(progress) {
+        animDiff = (animTarget - animOrigin) * clamp(progress, 0, 1);
+    };
+
+    vm.setSwipeAmount = function(amount) {
+        swipeDiff = clamp(amount, -1, 1);
+    };
+
+    vm.snapToNearestTarget = function(addToPos) {
+        addToPos = clamp(addToPos || 0, -0.49, 0.49);
+        currentPos += swipeDiff;
+        swipeDiff = 0;
+        targetPos = clampPos(Math.round(vm.getPosition() + addToPos));
+    };
+
+    vm.getTargetPosition = function() {
+        return clampPos(targetPos);
+    };
+
+    vm.getPosition = function() {
+        return clampPos(currentPos + animDiff + swipeDiff);
+    };
+
+    vm.isAtTarget = function() {
+        return Math.abs(vm.getTargetPosition() - vm.getPosition()) < 0.001;
+    };
+
+    function clampPos(pos) {
+        return clamp(pos, 0, vm.getItemCount() - 1);
+    }
+
+
+    vm.goBack = function() {
+        if (!vm.canGoBack()) {
+            return;
+        }
+        --targetPos;
+    };
+
+    vm.goForward = function() {
+        if (!vm.canGoForward()) {
+            return;
+        }
+        ++targetPos;
+    };
+
+    vm.canGoBack = function() {
+        return targetPos > 0;
+    };
+
+    vm.canGoForward = function() {
+        return targetPos + 1 < vm.getItemCount();
+    };
+
+
+    vm.getItemCount = function() {
+        return 20;
+    };
+
+    vm.getItemAtIndex = function(index) {
+        return new Item(index);
+    };
+
+    function Item(index) {
+        var item = this;
+
+        item.getId = function() {
+            return "item_" + index;
+        };
+
+        item.getImageUrl = function() {
+            return images[index % images.length];
+        };
+    }
+};
+
+
+var GalleryComponent = {};
+
+GalleryComponent.controller = function() {
+    var controller = this;
+    controller.vm = new GalleryViewModel();
+    controller.defaultAnimDuration = 0.25;
+    controller.animDuration = controller.defaultAnimDuration;
+};
+
+GalleryComponent.view = function(controller) {
+    var vm = controller.vm;
+    var itemCount = vm.getItemCount();
+    var windowWidth = $(window).width();
+
+    function sliderConfig(element, isInitialized, context) {
+        var $element = context.$element || (context.$element = $(element));
+
+        vm.stopAnim();
+        $element.velocity("stop");
+
+        if (!vm.isAtTarget()) {
+            vm.startAnim();
+            var startX = -Math.round(vm.getPosition() * windowWidth);
+            var targetX = -Math.round(vm.getTargetPosition() * windowWidth);
+
+            $element.velocity({translateX: [targetX, startX]}, {
+                duration: Math.round(controller.animDuration * 1000),
+                easing: "linear",
+                progress: function(elements, complete, remaining, start, tweenValue) {
+                    vm.animProgress(complete);
+                    if (vm.isAtTarget()) {
+                        vm.stopAnim();
+                        $element.velocity("stop");
+                    }
+                }
+            });
+        }
+
+        controller.animDuration = controller.defaultAnimDuration;
+
+        if (isInitialized) {
+            return;
+        }
+
+        var swiping = false;
+        var originX = 0;
+        var currX = 0;
+        var lastX = 0;
+        var lastTime = 0;
+        var speed = 0;
+
+        function doneTouching() {
+            if (swiping) {
+                swiping = false;
+                vm.snapToNearestTarget(speed * 0.2);
+                var dist = Math.abs(vm.getTargetPosition() - vm.getPosition());
+                controller.animDuration = clamp(dist / Math.abs(speed), 0.05, controller.defaultAnimDuration);
+                m.redraw();
+            }
+        }
+
+        var handlers = {
+            touchstart: function(e) {
+                if (e.touches.length !== 1) {
+                    return;
+                }
+
+                swiping = false;
+                originX = e.touches[0].pageX;
+                currX = originX;
+                lastX = originX;
+                lastTime = performance.now();
+                speed = 0;
+            },
+            touchmove: function(e) {
+                if (e.touches.length !== 1) {
+                    return;
+                }
+
+                currX = e.touches[0].pageX;
+                var now = performance.now();
+
+                if (!swiping && Math.abs(currX - originX) > 3) {
+                    vm.stopAnim();
+                    $element.velocity("stop");
+                    swiping = true;
+                }
+
+                if (swiping) {
+                    var diff = -(currX - originX) / windowWidth;
+                    vm.setSwipeAmount(diff);
+
+                    var sliderOffset = -Math.round(vm.getPosition() * windowWidth);
+                    $element.css({ transform: "translate(" + sliderOffset + "px, 0px)" });
+
+                    var dt = (now - lastTime) / 1000;
+                    var dx = -(currX - lastX) / windowWidth;
+                    speed = speed * 0.75 + (dx / dt) * 0.25;
+                }
+
+                lastX = currX;
+                lastTime = now;
+            },
+            touchend: doneTouching,
+            touchcancel: doneTouching
+        };
+
+        for (var eventName in handlers) {
+            document.addEventListener(eventName, handlers[eventName]);
+        }
+        context.onunload = function() {
+            for (var eventName in handlers) {
+                document.removeEventListener(eventName, handlers[eventName]);
+            }
+        };
+    }
+
+    var sliderOffset = -Math.round(vm.getPosition() * windowWidth);
+
+    var leftButtonAttrs = {
+        onclick: vm.goBack,
+        style: {
+            width: "25%",
+            height: "15%"
+        }
+    };
+    if (!vm.canGoBack()) {
+        leftButtonAttrs.disabled = "disabled";
+    }
+
+    var rightButtonAttrs = {
+        onclick: vm.goForward,
+        style: {
+            width: "25%",
+            height: "15%"
+        }
+    };
+    if (!vm.canGoForward()) {
+        rightButtonAttrs.disabled = "disabled";
+    }
+
+    var pos1 = Math.round(vm.getPosition());
+    var pos2 = Math.round(vm.getTargetPosition());
+    var start = Math.min(pos1, pos2) - 1;
+    var end = Math.max(pos1, pos2) + 1;
+    if (start < 0) {
+        start = 0;
+    }
+    if (end > itemCount - 1) {
+        end = itemCount - 1;
+    }
+
+    var imageElems = [];
+    for (var i = start; i <= end; ++i) {
+        var item = vm.getItemAtIndex(i);
+        imageElems.push(m("img.gallery-item", {
+            key: item.getId(),
+            src: item.getImageUrl(),
+            style: {
+                left: (i * windowWidth) + "px"
+            }
+        }))
+    }
+
+    return  m("div.gallery-container", [
+                m("button.gallery-left-button", leftButtonAttrs, "Left"),
+                m("button.gallery-right-button", rightButtonAttrs, "Right"),
+                m("div.gallery-slider", {
+                        key: "gallery-slider",
+                        config: sliderConfig,
+                        style: {
+                            transform: "translate(" + sliderOffset + "px, 0px)",
+                            width: (itemCount * 100) + "vw"
+                        }
+                    },
+                    imageElems
+                )
+            ]);
+};
+
+
+
+window.addEventListener('DOMContentLoaded', function() {
+    var rootElement = document.body;
+
+    if (window.platform !== undefined && platform.os !== undefined &&
+        platform.os.family == 'iOS' && parseInt(platform.os.version, 10) >= 8)
+    {
+        var scream = gajus.Scream();
+
+        var brim = gajus.Brim({
+            viewport: scream
+        });
+
+        rootElement = document.getElementById("brim-main");
+    } else {
+        while (rootElement.firstChild) {
+            rootElement.removeChild(rootElement.firstChild);
+        }
+    }
+
+    m.mount(rootElement, GalleryComponent);
+});
+
+
+</script>
+
+</head>
+
+<body>
+<div id="brim-mask">
+    <!-- Content displayed to the user when in full view. -->
+    Pull up to enter fullscreen view.
+</div>
+<div id="brim-main">
+    <!-- Content displayed to the user when in minimal view.  -->
+</div>
+</body>
+</html>
+
+
+
