@@ -3,19 +3,11 @@
 <head>
 <title>Gallery Test</title>
 
-<meta name="viewport" content="width=device-width, user-scalable=no">
-
-<script src="jquery.js"></script>
-<script src="velocity.js"></script>
-<script src="mithril.js"></script>
-<script src="scream.js"></script>
-<script src="brim.js"></script>
-
 <style type="text/css">
-
 body {
     margin: 0px;
     padding: 0px;
+    background-color: black;
 }
 
 #brim-mask {
@@ -56,11 +48,15 @@ body {
     bottom: 0;
     z-index: 1;
 }
-
 </style>
 
-
-
+<script src="jquery.js"></script>
+<script src="platform.js"></script>
+<script src="velocity.js"></script>
+<script src="mithril.js"></script>
+<script src="scream.js"></script>
+<script src="brim.js"></script>
+<script src="fastclick.js"></script>
 <script>
 
 // performance.now polyfill from: https://gist.github.com/paulirish/5438650
@@ -116,10 +112,7 @@ var GalleryViewModel = function() {
     var vm = this;
 
     var images = [
-        "https://upload.wikimedia.org/wikipedia/commons/3/36/Hopetoun_falls.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/1/1a/Bachalpseeflowers.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/3Falls_Niagara.jpg/1280px-3Falls_Niagara.jpg",
-        "https://upload.wikimedia.org/wikipedia/commons/a/af/Grand_Canyon_view_from_Pima_Point_2010.jpg"
+        "https://upload.wikimedia.org/wikipedia/commons/3/36/Hopetoun_falls.jpg"
     ];
 
     var currentPos = 0;
@@ -174,8 +167,12 @@ var GalleryViewModel = function() {
         return clampPos(currentPos + animDiff + swipeDiff);
     };
 
+    vm.getTargetDistance = function() {
+        return vm.getTargetPosition() - vm.getPosition();
+    };
+
     vm.isAtTarget = function() {
-        return Math.abs(vm.getTargetPosition() - vm.getPosition()) < 0.001;
+        return Math.abs(vm.getTargetDistance()) < 0.001;
     };
 
     function clampPos(pos) {
@@ -233,14 +230,20 @@ var GalleryComponent = {};
 GalleryComponent.controller = function() {
     var controller = this;
     controller.vm = new GalleryViewModel();
-    controller.defaultAnimDuration = 0.25;
-    controller.animDuration = controller.defaultAnimDuration;
+    controller.maxAnimSpeed = 4;
+    controller.maxAnimDuration = 1 / controller.maxAnimSpeed;
+    controller.minAnimDuration = 0.05;
+    controller.nextAnimDuration = null;
 };
 
 GalleryComponent.view = function(controller) {
     var vm = controller.vm;
     var itemCount = vm.getItemCount();
     var windowWidth = $(window).width();
+
+    function clampSpeed(speed) {
+        return clamp(speed, controller.minAnimDuration, controller.maxAnimDuration);
+    }
 
     function sliderConfig(element, isInitialized, context) {
         var $element = context.$element || (context.$element = $(element));
@@ -250,11 +253,17 @@ GalleryComponent.view = function(controller) {
 
         if (!vm.isAtTarget()) {
             vm.startAnim();
+
             var startX = -Math.round(vm.getPosition() * windowWidth);
             var targetX = -Math.round(vm.getTargetPosition() * windowWidth);
+            var duration = controller.nextAnimDuration;
+            if (duration === null) {
+                var dist = Math.abs(vm.getTargetDistance());
+                duration = clampSpeed(dist / controller.maxAnimSpeed);
+            }
 
             $element.velocity({translateX: [targetX, startX]}, {
-                duration: Math.round(controller.animDuration * 1000),
+                duration: Math.round(duration * 1000),
                 easing: "linear",
                 progress: function(elements, complete, remaining, start, tweenValue) {
                     vm.animProgress(complete);
@@ -266,7 +275,7 @@ GalleryComponent.view = function(controller) {
             });
         }
 
-        controller.animDuration = controller.defaultAnimDuration;
+        controller.nextAnimDuration = null;
 
         if (isInitialized) {
             return;
@@ -283,8 +292,8 @@ GalleryComponent.view = function(controller) {
             if (swiping) {
                 swiping = false;
                 vm.snapToNearestTarget(speed * 0.2);
-                var dist = Math.abs(vm.getTargetPosition() - vm.getPosition());
-                controller.animDuration = clamp(dist / Math.abs(speed), 0.05, controller.defaultAnimDuration);
+                var dist = Math.abs(vm.getTargetDistance());
+                controller.nextAnimDuration = clampSpeed(dist / Math.abs(speed));
                 m.redraw();
             }
         }
@@ -309,6 +318,7 @@ GalleryComponent.view = function(controller) {
 
                 currX = e.touches[0].pageX;
                 var now = performance.now();
+                var windowWidth = $(window).width();
 
                 if (!swiping && Math.abs(currX - originX) > 3) {
                     vm.stopAnim();
@@ -332,7 +342,27 @@ GalleryComponent.view = function(controller) {
                 lastTime = now;
             },
             touchend: doneTouching,
-            touchcancel: doneTouching
+            touchcancel: doneTouching,
+
+            keydown: function(e) {
+                if (e.keyCode === 37) {
+                    vm.goBack();
+                    m.redraw();
+                } else if (e.keyCode === 39) {
+                    vm.goForward();
+                    m.redraw();
+                }
+            },
+            click: function(e) {
+                console.log("click");
+                if (e.pageX < $(window).width() / 2) {
+                    vm.goBack();
+                    m.redraw();
+                } else {
+                    vm.goForward();
+                    m.redraw();
+                }
+            }
         };
 
         for (var eventName in handlers) {
@@ -346,28 +376,6 @@ GalleryComponent.view = function(controller) {
     }
 
     var sliderOffset = -Math.round(vm.getPosition() * windowWidth);
-
-    var leftButtonAttrs = {
-        onclick: vm.goBack,
-        style: {
-            width: "25%",
-            height: "15%"
-        }
-    };
-    if (!vm.canGoBack()) {
-        leftButtonAttrs.disabled = "disabled";
-    }
-
-    var rightButtonAttrs = {
-        onclick: vm.goForward,
-        style: {
-            width: "25%",
-            height: "15%"
-        }
-    };
-    if (!vm.canGoForward()) {
-        rightButtonAttrs.disabled = "disabled";
-    }
 
     var pos1 = Math.round(vm.getPosition());
     var pos2 = Math.round(vm.getTargetPosition());
@@ -393,8 +401,6 @@ GalleryComponent.view = function(controller) {
     }
 
     return  m("div.gallery-container", [
-                m("button.gallery-left-button", leftButtonAttrs, "Left"),
-                m("button.gallery-right-button", rightButtonAttrs, "Right"),
                 m("div.gallery-slider", {
                         key: "gallery-slider",
                         config: sliderConfig,
@@ -409,13 +415,13 @@ GalleryComponent.view = function(controller) {
 };
 
 
+window.addEventListener('load', function() {
+    FastClick.attach(document.body);
 
-window.addEventListener('DOMContentLoaded', function() {
     var rootElement = document.body;
 
-    if (window.platform !== undefined && platform.os !== undefined &&
-        platform.os.family == 'iOS' && parseInt(platform.os.version, 10) >= 8)
-    {
+    if (false && platform.os.family == 'iOS' && parseInt(platform.os.version, 10) >= 8) {
+        console.log("iOS");
         var scream = gajus.Scream();
 
         var brim = gajus.Brim({
@@ -424,27 +430,28 @@ window.addEventListener('DOMContentLoaded', function() {
 
         rootElement = document.getElementById("brim-main");
     } else {
-        while (rootElement.firstChild) {
-            rootElement.removeChild(rootElement.firstChild);
-        }
+        console.log("not iOS");
+        //while (rootElement.firstChild) {
+        //    rootElement.removeChild(rootElement.firstChild);
+        //}
     }
 
     m.mount(rootElement, GalleryComponent);
 });
-
-
 </script>
 
 </head>
 
 <body>
+
+<!--
 <div id="brim-mask">
-    <!-- Content displayed to the user when in full view. -->
     Pull up to enter fullscreen view.
 </div>
 <div id="brim-main">
-    <!-- Content displayed to the user when in minimal view.  -->
 </div>
+-->
+
 </body>
 </html>
 
