@@ -1,53 +1,60 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Gallery Test</title>
 
 <style type="text/css">
+
+/*html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}*/
+
 body {
-    margin: 0px;
-    padding: 0px;
+    margin: 0;
+    padding: 0;
     background-color: black;
 }
 
-#brim-mask {
-    pointer-events: none;
-}
+/*@media screen and (width: 320px) {
+    html {
+        height: calc(100% + 72px);
+    }
+    div.cover {
+        display: block;
+    }
+}*/
+
+
 
 .gallery-container {
     width: 100vw;
     height: 100vh;
     overflow: hidden;
+    position: fixed;
     -ms-touch-action: none;
 }
 
 .gallery-slider {
-    float: left;
-    height: 100%;
+    height: 100vh;
     position: relative;
-    z-index: 0;
+    -webkit-transform-style: preserve-3d;
 }
 
 .gallery-item {
     width: 100vw;
-    height: 100%;
+    height: 100vh;
     position: absolute;
     top: 0px;
+    -webkit-backface-visibility: hidden;
+    -webkit-transform-style: preserve-3d;
 }
 
-.gallery-left-button {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    z-index: 1;
-}
-
-.gallery-right-button {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    z-index: 1;
-}
 </style>
 
 <script src="jquery.js"></script>
@@ -331,7 +338,7 @@ GalleryComponent.view = function(controller) {
                     controller.setSwipeAmount(diff);
 
                     var sliderOffset = -Math.round(controller.getPosition() * windowWidth);
-                    $element.css({ transform: "translate(" + sliderOffset + "px, 0px)" });
+                    $element.css({ transform: "translate3d(" + sliderOffset + "px, 0px, 0px)" });
 
                     var dt = (now - lastTime) / 1000;
                     var dx = -(currX - lastX) / windowWidth;
@@ -354,11 +361,11 @@ GalleryComponent.view = function(controller) {
                 }
             },
             click: function(e) {
-                console.log("click");
-                if (e.pageX < $(window).width() / 2) {
+                var windowWidth = $(window).width();
+                if (e.pageX < windowWidth * 0.333) {
                     controller.goBack();
                     m.redraw();
-                } else {
+                } else if (e.pageX > windowWidth * 0.667) {
                     controller.goForward();
                     m.redraw();
                 }
@@ -375,18 +382,10 @@ GalleryComponent.view = function(controller) {
         };
     }
 
-    var sliderOffset = -Math.round(controller.getPosition() * windowWidth);
-
     var pos1 = Math.round(controller.getPosition());
     var pos2 = Math.round(controller.getTargetPosition());
-    var start = Math.min(pos1, pos2) - 1;
-    var end = Math.max(pos1, pos2) + 1;
-    if (start < 0) {
-        start = 0;
-    }
-    if (end > itemCount - 1) {
-        end = itemCount - 1;
-    }
+    var start = Math.max(0, Math.min(pos1, pos2) - 1);
+    var end = Math.min(itemCount - 1, Math.max(pos1, pos2) + 1);
 
     var imageElems = [];
     for (var i = start; i <= end; ++i) {
@@ -397,15 +396,31 @@ GalleryComponent.view = function(controller) {
             style: {
                 left: (i * windowWidth) + "px"
             }
-        }))
+        }));
+        /*imageElems.push(m("div.gallery-item", {
+            key: item.getId(),
+            src: item.getImageUrl(),
+            style: {
+                left: (i * windowWidth) + "px"
+            }
+        }, m("div", {
+            style: {
+                backgroundColor: "blue",
+                margin: "10px",
+                width: "100%",
+                height: "100%"
+            }
+        })));*/
     }
+
+    var sliderOffset = -Math.round(controller.getPosition() * windowWidth);
 
     return  m("div.gallery-container", [
                 m("div.gallery-slider", {
                         key: "gallery-slider",
                         config: sliderConfig,
                         style: {
-                            transform: "translate(" + sliderOffset + "px, 0px)",
+                            transform: "translate3d(" + sliderOffset + "px, 0px, 0px)",
                             width: (itemCount * 100) + "vw"
                         }
                     },
