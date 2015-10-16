@@ -115,94 +115,6 @@ var GalleryViewModel = function() {
         "https://upload.wikimedia.org/wikipedia/commons/3/36/Hopetoun_falls.jpg"
     ];
 
-    var currentPos = 0;
-    var targetPos = 0;
-
-    var animOrigin = 0;
-    var animTarget = 0;
-    var animDiff = 0;
-
-    var swipeDiff = 0;
-
-    vm.startAnim = function() {
-        animOrigin = vm.getPosition();
-        animTarget = targetPos;
-        animDiff = 0;
-    };
-
-    vm.stopAnim = function() {
-        currentPos += animDiff;
-
-        animOrigin = 0;
-        animTarget = 0;
-        animDiff = 0;
-
-        if (vm.isAtTarget()) {
-            currentPos = Math.round(vm.getPosition());
-            targetPos = currentPos;
-            swipeDiff = 0;
-        }
-    };
-
-    vm.animProgress = function(progress) {
-        animDiff = (animTarget - animOrigin) * clamp(progress, 0, 1);
-    };
-
-    vm.setSwipeAmount = function(amount) {
-        swipeDiff = clamp(amount, -1, 1);
-    };
-
-    vm.snapToNearestTarget = function(addToPos) {
-        addToPos = clamp(addToPos || 0, -0.49, 0.49);
-        currentPos += swipeDiff;
-        swipeDiff = 0;
-        targetPos = clampPos(Math.round(vm.getPosition() + addToPos));
-    };
-
-    vm.getTargetPosition = function() {
-        return clampPos(targetPos);
-    };
-
-    vm.getPosition = function() {
-        return clampPos(currentPos + animDiff + swipeDiff);
-    };
-
-    vm.getTargetDistance = function() {
-        return vm.getTargetPosition() - vm.getPosition();
-    };
-
-    vm.isAtTarget = function() {
-        return Math.abs(vm.getTargetDistance()) < 0.001;
-    };
-
-    function clampPos(pos) {
-        return clamp(pos, 0, vm.getItemCount() - 1);
-    }
-
-
-    vm.goBack = function() {
-        if (!vm.canGoBack()) {
-            return;
-        }
-        --targetPos;
-    };
-
-    vm.goForward = function() {
-        if (!vm.canGoForward()) {
-            return;
-        }
-        ++targetPos;
-    };
-
-    vm.canGoBack = function() {
-        return targetPos > 0;
-    };
-
-    vm.canGoForward = function() {
-        return targetPos + 1 < vm.getItemCount();
-    };
-
-
     vm.getItemCount = function() {
         return 20;
     };
@@ -229,11 +141,99 @@ var GalleryComponent = {};
 
 GalleryComponent.controller = function() {
     var controller = this;
-    controller.vm = new GalleryViewModel();
+    var vm = new GalleryViewModel();
+
+    controller.vm = vm;
     controller.maxAnimSpeed = 4;
     controller.maxAnimDuration = 1 / controller.maxAnimSpeed;
     controller.minAnimDuration = 0.05;
     controller.nextAnimDuration = null;
+
+    var currentPos = 0;
+    var targetPos = 0;
+
+    var animOrigin = 0;
+    var animTarget = 0;
+    var animDiff = 0;
+
+    var swipeDiff = 0;
+
+    function clampPos(pos) {
+        return clamp(pos, 0, vm.getItemCount() - 1);
+    }
+
+    controller.startAnim = function() {
+        animOrigin = controller.getPosition();
+        animTarget = targetPos;
+        animDiff = 0;
+    };
+
+    controller.stopAnim = function() {
+        currentPos += animDiff;
+
+        animOrigin = 0;
+        animTarget = 0;
+        animDiff = 0;
+
+        if (controller.isAtTarget()) {
+            currentPos = Math.round(controller.getPosition());
+            targetPos = currentPos;
+            swipeDiff = 0;
+        }
+    };
+
+    controller.animProgress = function(progress) {
+        animDiff = (animTarget - animOrigin) * clamp(progress, 0, 1);
+    };
+
+    controller.setSwipeAmount = function(amount) {
+        swipeDiff = clamp(amount, -1, 1);
+    };
+
+    controller.snapToNearestTarget = function(addToPos) {
+        addToPos = clamp(addToPos || 0, -0.49, 0.49);
+        currentPos += swipeDiff;
+        swipeDiff = 0;
+        targetPos = clampPos(Math.round(controller.getPosition() + addToPos));
+    };
+
+    controller.getTargetPosition = function() {
+        return clampPos(targetPos);
+    };
+
+    controller.getPosition = function() {
+        return clampPos(currentPos + animDiff + swipeDiff);
+    };
+
+    controller.getTargetDistance = function() {
+        return controller.getTargetPosition() - controller.getPosition();
+    };
+
+    controller.isAtTarget = function() {
+        return Math.abs(controller.getTargetDistance()) < 0.001;
+    };
+
+    controller.goBack = function() {
+        if (!controller.canGoBack()) {
+            return;
+        }
+        --targetPos;
+    };
+
+    controller.goForward = function() {
+        if (!controller.canGoForward()) {
+            return;
+        }
+        ++targetPos;
+    };
+
+    controller.canGoBack = function() {
+        return targetPos > 0;
+    };
+
+    controller.canGoForward = function() {
+        return targetPos + 1 < vm.getItemCount();
+    };
 };
 
 GalleryComponent.view = function(controller) {
@@ -248,17 +248,17 @@ GalleryComponent.view = function(controller) {
     function sliderConfig(element, isInitialized, context) {
         var $element = context.$element || (context.$element = $(element));
 
-        vm.stopAnim();
+        controller.stopAnim();
         $element.velocity("stop");
 
-        if (!vm.isAtTarget()) {
-            vm.startAnim();
+        if (!controller.isAtTarget()) {
+            controller.startAnim();
 
-            var startX = -Math.round(vm.getPosition() * windowWidth);
-            var targetX = -Math.round(vm.getTargetPosition() * windowWidth);
+            var startX = -Math.round(controller.getPosition() * windowWidth);
+            var targetX = -Math.round(controller.getTargetPosition() * windowWidth);
             var duration = controller.nextAnimDuration;
             if (duration === null) {
-                var dist = Math.abs(vm.getTargetDistance());
+                var dist = Math.abs(controller.getTargetDistance());
                 duration = clampSpeed(dist / controller.maxAnimSpeed);
             }
 
@@ -266,9 +266,9 @@ GalleryComponent.view = function(controller) {
                 duration: Math.round(duration * 1000),
                 easing: "linear",
                 progress: function(elements, complete, remaining, start, tweenValue) {
-                    vm.animProgress(complete);
-                    if (vm.isAtTarget()) {
-                        vm.stopAnim();
+                    controller.animProgress(complete);
+                    if (controller.isAtTarget()) {
+                        controller.stopAnim();
                         $element.velocity("stop");
                     }
                 }
@@ -291,8 +291,8 @@ GalleryComponent.view = function(controller) {
         function doneTouching() {
             if (swiping) {
                 swiping = false;
-                vm.snapToNearestTarget(speed * 0.2);
-                var dist = Math.abs(vm.getTargetDistance());
+                controller.snapToNearestTarget(speed * 0.2);
+                var dist = Math.abs(controller.getTargetDistance());
                 controller.nextAnimDuration = clampSpeed(dist / Math.abs(speed));
                 m.redraw();
             }
@@ -321,16 +321,16 @@ GalleryComponent.view = function(controller) {
                 var windowWidth = $(window).width();
 
                 if (!swiping && Math.abs(currX - originX) > 3) {
-                    vm.stopAnim();
+                    controller.stopAnim();
                     $element.velocity("stop");
                     swiping = true;
                 }
 
                 if (swiping) {
                     var diff = -(currX - originX) / windowWidth;
-                    vm.setSwipeAmount(diff);
+                    controller.setSwipeAmount(diff);
 
-                    var sliderOffset = -Math.round(vm.getPosition() * windowWidth);
+                    var sliderOffset = -Math.round(controller.getPosition() * windowWidth);
                     $element.css({ transform: "translate(" + sliderOffset + "px, 0px)" });
 
                     var dt = (now - lastTime) / 1000;
@@ -346,20 +346,20 @@ GalleryComponent.view = function(controller) {
 
             keydown: function(e) {
                 if (e.keyCode === 37) {
-                    vm.goBack();
+                    controller.goBack();
                     m.redraw();
                 } else if (e.keyCode === 39) {
-                    vm.goForward();
+                    controller.goForward();
                     m.redraw();
                 }
             },
             click: function(e) {
                 console.log("click");
                 if (e.pageX < $(window).width() / 2) {
-                    vm.goBack();
+                    controller.goBack();
                     m.redraw();
                 } else {
-                    vm.goForward();
+                    controller.goForward();
                     m.redraw();
                 }
             }
@@ -375,10 +375,10 @@ GalleryComponent.view = function(controller) {
         };
     }
 
-    var sliderOffset = -Math.round(vm.getPosition() * windowWidth);
+    var sliderOffset = -Math.round(controller.getPosition() * windowWidth);
 
-    var pos1 = Math.round(vm.getPosition());
-    var pos2 = Math.round(vm.getTargetPosition());
+    var pos1 = Math.round(controller.getPosition());
+    var pos2 = Math.round(controller.getTargetPosition());
     var start = Math.min(pos1, pos2) - 1;
     var end = Math.max(pos1, pos2) + 1;
     if (start < 0) {
